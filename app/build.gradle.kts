@@ -25,7 +25,7 @@ val betaNumber = betaTags.map { tags ->
 }
 
 android {
-    namespace = "com.kangrio.byd.assistant"
+applicationId = "com.mhk.ai.assistant"
     compileSdk {
         version = release(37)
     }
