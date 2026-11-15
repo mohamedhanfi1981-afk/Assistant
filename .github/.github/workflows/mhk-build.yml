@@ -1,0 +1,51 @@
+
+name: Build MHK AI Toyota S222
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'MHK-AI-Toyota-S222-1.0.11-source.zip'
+      - '.github/workflows/mhk-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Extract MHK AI source
+        run: |
+          mkdir -p /tmp/mhk-source
+          unzip -q MHK-AI-Toyota-S222-1.0.11-source.zip -d /tmp/mhk-source
+          PROJECT_DIR=$(find /tmp/mhk-source -name settings.gradle.kts -printf '%h\n' | head -n 1)
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "Project settings.gradle.kts not found"
+            exit 1
+          fi
+          rsync -a --exclude='.git/' --exclude='.github/' "$PROJECT_DIR"/ ./
+          chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: MHK-AI-Toyota-S222-debug
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
