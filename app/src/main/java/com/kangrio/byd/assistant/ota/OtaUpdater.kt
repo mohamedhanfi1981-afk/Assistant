@@ -12,7 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.FileProvider
 import com.kangrio.byd.assistant.Constant
-import com.kangrio.byd.assistant.R
+import com.mhk.ai.assistant.R
 import com.kangrio.byd.assistant.activity.SettingsActivity
 import com.kangrio.byd.assistant.data.ReleaseInfo
 import com.kangrio.byd.assistant.util.Preferences
