@@ -14,7 +14,7 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
-import com.mhk.ai.assistant.R
+import com.kangrio.byd.assistant.R
 import com.kangrio.byd.assistant.activity.SettingsActivity
 import com.kangrio.byd.assistant.util.Preferences
 import com.kangrio.byd.assistant.util.Utils
