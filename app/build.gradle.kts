@@ -22,20 +22,17 @@ val betaNumber = betaTags.map { tags ->
         .maxOrNull()
         ?.plus(1)
         ?: 1
-}
-
 android {
-applicationId = "com.mhk.ai.assistant"
+    namespace = "com.mhk.ai.assistant"
+
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.kangrio.byd.assistant"
+        applicationId = "com.mhk.ai.assistant"
         minSdk = 24
         targetSdk = 37
-        versionCode = appVersionCode
-        versionName = appVersionName
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
