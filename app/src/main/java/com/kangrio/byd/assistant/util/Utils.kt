@@ -24,7 +24,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import com.kangrio.byd.assistant.Constant
-import com.mhk.ai.assistant.R
+import com.kangrio.byd.assistant.R
 import com.kangrio.byd.assistant.StartActivity
 import com.kangrio.byd.assistant.data.AssistantApp
 import kotlinx.coroutines.MainScope
