@@ -36,6 +36,18 @@ jobs:
           rsync -a --exclude='.git/' "$PROJECT_DIR"/ ./
           chmod +x gradlew
           find app/src/main/java -type f -name '*.kt' -exec sed -i 's#com\.kangrio\.byd\.assistant\.R#com.mhk.ai.assistant.R#g' {} +
+          # Fix manifest class names: Kotlin classes remain in the original package.
+          sed -i \
+            -e 's#android:name=".App"#android:name="com.kangrio.byd.assistant.App"#' \
+            -e 's#android:name=".StartActivity"#android:name="com.kangrio.byd.assistant.StartActivity"#' \
+            -e 's#android:name=".activity.SettingsActivity"#android:name="com.kangrio.byd.assistant.activity.SettingsActivity"#' \
+            -e 's#android:name=".activity.PermissionOnboardingActivity"#android:name="com.kangrio.byd.assistant.activity.PermissionOnboardingActivity"#' \
+            -e 's#android:name=".activity.LogcatActivity"#android:name="com.kangrio.byd.assistant.activity.LogcatActivity"#' \
+            -e 's#android:name=".receiver.BootReceiver"#android:name="com.kangrio.byd.assistant.receiver.BootReceiver"#' \
+            -e 's#android:name=".service.VoiceWakeService"#android:name="com.kangrio.byd.assistant.service.VoiceWakeService"#' \
+            -e 's#android:name=".service.ButtonTriggerService"#android:name="com.kangrio.byd.assistant.service.ButtonTriggerService"#' \
+            app/src/main/AndroidManifest.xml
+
 
       - name: Build APK
         run: ./gradlew :app:assembleDebug --stacktrace
