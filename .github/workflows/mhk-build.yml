@@ -35,6 +35,7 @@ jobs:
           test -n "$PROJECT_DIR"
           rsync -a --exclude='.git/' "$PROJECT_DIR"/ ./
           chmod +x gradlew
+          find app/src/main/java -type f -name '*.kt' -exec sed -i 's#com\.kangrio\.byd\.assistant\.R#com.mhk.ai.assistant.R#g' {} +
 
       - name: Build APK
         run: ./gradlew :app:assembleDebug --stacktrace
