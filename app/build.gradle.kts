@@ -1,7 +1,7 @@
+
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Properties
-import kotlin.apply
 
 plugins {
     alias(libs.plugins.android.application)
@@ -16,12 +16,15 @@ val betaTags = providers.provider {
         commandLine("git", "tag", "-l", "v${appVersionName}-beta.*")
     }.standardOutput.asText.get().trim()
 }
+
 val betaNumber = betaTags.map { tags ->
     tags.lineSequence()
         .mapNotNull { it.substringAfter("-beta.").toIntOrNull() }
         .maxOrNull()
         ?.plus(1)
         ?: 1
+}
+
 android {
     namespace = "com.mhk.ai.assistant"
 
@@ -33,18 +36,22 @@ android {
         applicationId = "com.mhk.ai.assistant"
         minSdk = 24
         targetSdk = 37
+
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner =
+            "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         if (file("signing.properties").exists()) {
             create("release") {
                 val properties = Properties().apply {
-                    file("signing.properties").inputStream().use { load(it) }
+                    file("signing.properties").inputStream().use {
+                        load(it)
+                    }
                 }
 
                 keyAlias = properties["KEY_ALIAS"] as String
@@ -62,11 +69,13 @@ android {
                 isMinifyEnabled = true
                 isShrinkResources = true
             }
-            signingConfig = if (file("signing.properties").exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+
+            signingConfig =
+                if (file("signing.properties").exists()) {
+                    signingConfigs.getByName("release")
+                } else {
+                    signingConfigs.getByName("debug")
+                }
         }
 
         register("beta") {
@@ -75,10 +84,12 @@ android {
             versionNameSuffix = "-beta.${betaNumber.get()}"
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+
     buildFeatures {
         buildConfig = true
         compose = true
@@ -89,8 +100,11 @@ androidComponents {
     onVariants { variant ->
         variant.outputs.forEach { output ->
             val date = SimpleDateFormat("ddMMyyyyHHmmss").format(Date())
+
             output.outputFileName.set(
-                "${rootProject.name}-${output.versionName.get()}(${output.versionCode.get()})-${variant.name}-$date.apk"
+                "${rootProject.name}-${output.versionName.get()}" +
+                    "(${output.versionCode.get()})-" +
+                    "${variant.name}-$date.apk"
             )
         }
     }
@@ -117,11 +131,14 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+
     testImplementation(libs.junit)
+
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
