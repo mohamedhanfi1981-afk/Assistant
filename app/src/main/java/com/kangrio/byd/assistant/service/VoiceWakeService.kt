@@ -1,12 +1,16 @@
 package com.kangrio.byd.assistant.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -14,19 +18,16 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.mhk.ai.assistant.R
 import com.kangrio.byd.assistant.activity.SettingsActivity
+import com.kangrio.byd.assistant.ota.OtaUpdater
 import com.kangrio.byd.assistant.util.Preferences
+import com.kangrio.byd.assistant.util.ShellServer
 import com.kangrio.byd.assistant.util.Utils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import android.content.BroadcastReceiver
-import android.content.IntentFilter
-import com.kangrio.byd.assistant.ota.OtaUpdater
-import com.kangrio.byd.assistant.runnable.KillAppRunnable
-import com.kangrio.byd.assistant.util.ShellServer
-import com.kangrio.shellserver.client.ShellServerHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,15 +35,24 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Duration.Companion.milliseconds
 
 class VoiceWakeService : Service() {
+
     private var detector: OpenWakeWordDetector? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO
+    )
+
     private val handler = Handler(Looper.getMainLooper())
-    lateinit var toast: Toast
+
+    private lateinit var toast: Toast
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent?) {
             if (intent?.action == Intent.ACTION_SCREEN_ON) {
-                Log.d("VoiceWakeService", "Screen turned ON, checking for OTA update...")
+                Log.d(
+                    "VoiceWakeService",
+                    "Screen turned ON, checking for OTA update..."
+                )
                 OtaUpdater.checkUpdateInBackground(context, force = false)
             }
         }
@@ -50,7 +60,9 @@ class VoiceWakeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+
         isStarted = true
+
         createNotificationChannel()
 
         val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
@@ -61,25 +73,36 @@ class VoiceWakeService : Service() {
         scope.launch {
             startHotwordDetection()
         }
+
         watchDogAccessibility()
     }
 
     fun watchDogAccessibility() {
         scope.launch {
             delay(5000.milliseconds)
+
             while (isActive) {
-                if (Preferences.enabledButtonTrigger && !ButtonTriggerService.isServiceRunning) {
+                if (
+                    Preferences.enabledButtonTrigger &&
+                    !ButtonTriggerService.isServiceRunning
+                ) {
                     ShellServer.reStartApp()
                 }
+
                 delay(2000.milliseconds)
             }
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action
-        when(action) {
-             START_HOTWORD_DETECTION -> {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int
+    ): Int {
+
+        when (intent?.action) {
+
+            START_HOTWORD_DETECTION -> {
                 scope.launch {
                     startHotwordDetection()
                 }
@@ -90,17 +113,26 @@ class VoiceWakeService : Service() {
             }
 
             SET_MODEL -> {
-                val filePath = intent.extras?.getString("pmdlFile") ?: return START_STICKY
+                val filePath =
+                    intent.extras?.getString("pmdlFile")
+                        ?: return START_STICKY
+
                 setModel(filePath)
             }
 
             SET_SENSITIVITY -> {
-                val sensitivity = intent.extras?.getFloat("sensitivity") ?: return START_STICKY
+                val sensitivity =
+                    intent.extras?.getFloat("sensitivity")
+                        ?: return START_STICKY
+
                 setSensitivity(sensitivity)
             }
 
             SET_AUDIO_SOURCE -> {
-                val source = intent.extras?.getInt("source") ?: return START_STICKY
+                val source =
+                    intent.extras?.getInt("source")
+                        ?: return START_STICKY
+
                 setAudioSource(source)
             }
         }
@@ -113,7 +145,13 @@ class VoiceWakeService : Service() {
             if (::toast.isInitialized) {
                 toast.cancel()
             }
-            toast = Toast.makeText(this, message, Toast.LENGTH_SHORT)
+
+            toast = Toast.makeText(
+                this,
+                message,
+                Toast.LENGTH_SHORT
+            )
+
             toast.show()
         }
     }
@@ -140,64 +178,173 @@ class VoiceWakeService : Service() {
     }
 
     fun startHotwordDetection() {
-        if (!Utils.isGranted(this, android.Manifest.permission.RECORD_AUDIO)) {
-            showToast("""Please grant the microphone permission to start hotword detection.""")
+
+        Log.i(
+            "MHK_WakeWord",
+            "Starting wake-word detection"
+        )
+
+        if (
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(
+                "MHK_WakeWord",
+                "Microphone permission denied"
+            )
+
+            showToast("Please grant microphone permission")
             return
         }
-        if (!Utils.setupCompleted(this@VoiceWakeService) || !Preferences.startHotword) return
+
+        if (!Utils.setupCompleted(this)) {
+            Log.e(
+                "MHK_WakeWord",
+                "Assistant setup is incomplete"
+            )
+
+            showToast("Assistant setup is incomplete")
+            return
+        }
+
+        if (!Preferences.startHotword) {
+            Log.w(
+                "MHK_WakeWord",
+                "Wake-word detection is disabled"
+            )
+            return
+        }
 
         val modelName = Preferences.hotwordModelName
         val audioSource = Preferences.micAudioSource
-        detector?.stop()
-        detector = OpenWakeWordDetector(
-            context = this@VoiceWakeService,
-            audioSource = audioSource,
-            modelName = modelName,
-            sensitivity = Preferences.hotwordSensitivity,
-        ) {
-            onWakeWordDetected()
-        }
 
-        isWakeWordStarted = detector?.start() == true
-        if (isWakeWordStarted) {
-            showToast("""Hotword Detection Started""")
-        } else {
-            showToast("""Hotword Detection Failed""")
+        Log.i("MHK_WakeWord", "Model: $modelName")
+        Log.i("MHK_WakeWord", "Audio source: $audioSource")
+        Log.i(
+            "MHK_WakeWord",
+            "Sensitivity: ${Preferences.hotwordSensitivity}"
+        )
+
+        try {
+
+            detector?.stop()
+
+            detector = OpenWakeWordDetector(
+                context = this@VoiceWakeService,
+                audioSource = audioSource,
+                modelName = modelName,
+                sensitivity = Preferences.hotwordSensitivity
+            ) {
+                Log.i(
+                    "MHK_WakeWord",
+                    "WAKE WORD DETECTED"
+                )
+
+                onWakeWordDetected()
+            }
+
+            isWakeWordStarted = detector?.start() == true
+
+            Log.i(
+                "MHK_WakeWord",
+                "Detector start result: $isWakeWordStarted"
+            )
+
+            showToast(
+                if (isWakeWordStarted) {
+                    "Hotword engine initialized"
+                } else {
+                    "Hotword Detection Failed"
+                }
+            )
+
+        } catch (e: Exception) {
+
+            isWakeWordStarted = false
+
+            Log.e(
+                "MHK_WakeWord",
+                "Wake-word startup exception",
+                e
+            )
+
+            showToast("Wake-word startup failed")
         }
     }
 
     fun stopHotwordDetection() {
-        detector?.stop()
+
+        try {
+            detector?.stop()
+        } catch (e: Exception) {
+            Log.e(
+                "MHK_WakeWord",
+                "Error stopping detector",
+                e
+            )
+        }
+
         detector = null
         isWakeWordStarted = false
-        showToast("""Hotword Detection Stopped""")
+
+        Log.i(
+            "MHK_WakeWord",
+            "Wake-word detection stopped"
+        )
+
+        showToast("Hotword Detection Stopped")
     }
 
     suspend fun restartHotwordDetection() {
+
         stopHotwordDetection()
+
         delay(1000.milliseconds)
+
         startHotwordDetection()
     }
 
     private fun onWakeWordDetected() {
+
+        Log.i(
+            "MHK_WakeWord",
+            "Wake word callback received"
+        )
+
         scope.launch(Dispatchers.IO) {
+
             detector?.pause()
 
             withContext(Dispatchers.Main) {
-                Utils.startVoiceAssistant(this@VoiceWakeService)
+                Utils.startVoiceAssistant(
+                    this@VoiceWakeService
+                )
             }
 
             delay(DEBOUNCE_DELAY_MS.milliseconds)
+
             detector?.resume()
         }
     }
 
     override fun onDestroy() {
+
         isStarted = false
+
         try {
             unregisterReceiver(screenReceiver)
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.w(
+                "VoiceWakeService",
+                "Receiver unregister warning",
+                e
+            )
+        }
+
         stopHotwordDetection()
+
         super.onDestroy()
     }
 
@@ -206,11 +353,13 @@ class VoiceWakeService : Service() {
     }
 
     private fun createNotificationChannel() {
+
         val manager = getSystemService(
             NotificationManager::class.java
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
@@ -221,11 +370,24 @@ class VoiceWakeService : Service() {
         }
 
         handler.post(object : Runnable {
+
             override fun run() {
+
                 try {
-                    startForeground(NOTIFICATION_ID, createNotification())
+
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createNotification()
+                    )
+
                 } catch (e: Throwable) {
-                    Log.e("VoiceWakeService", "Error creating notification", e)
+
+                    Log.e(
+                        "VoiceWakeService",
+                        "Error creating notification",
+                        e
+                    )
+
                     handler.postDelayed(this, 1000)
                 }
             }
@@ -233,9 +395,16 @@ class VoiceWakeService : Service() {
     }
 
     private fun createNotification(): Notification {
-        val intent = Intent(this, SettingsActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+
+        val intent = Intent(
+            this,
+            SettingsActivity::class.java
+        ).apply {
+            flags =
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
+
         val pendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -243,7 +412,10 @@ class VoiceWakeService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(
+            this,
+            CHANNEL_ID
+        )
             .setContentTitle("Voice Assistant")
             .setContentText("Click to open settings")
             .setSmallIcon(R.mipmap.ic_launcher_round)
@@ -253,24 +425,47 @@ class VoiceWakeService : Service() {
     }
 
     companion object {
+
         private const val CHANNEL_ID = "voice_assistant"
+
         private const val NOTIFICATION_ID = 1001
+
         private const val DEBOUNCE_DELAY_MS = 5_000L
+
         private var isStarted = false
+
         var isWakeWordStarted = false
             private set
 
         const val START_HOTWORD_DETECTION =
             "com.kangrio.byd.assistant.action.START_HOTWORD_DETECTION"
-        const val STOP_HOTWORD_DETECTION = "com.kangrio.byd.assistant.action.STOP_HOTWORD_DETECTION"
-        const val SET_MODEL = "com.kangrio.byd.assistant.action.SET_MODEL"
-        const val SET_SENSITIVITY = "com.kangrio.byd.assistant.action.SET_SENSITIVITY"
-        const val SET_AUDIO_SOURCE = "com.kangrio.byd.assistant.action.SET_AUDIO_SOURCE"
+
+        const val STOP_HOTWORD_DETECTION =
+            "com.kangrio.byd.assistant.action.STOP_HOTWORD_DETECTION"
+
+        const val SET_MODEL =
+            "com.kangrio.byd.assistant.action.SET_MODEL"
+
+        const val SET_SENSITIVITY =
+            "com.kangrio.byd.assistant.action.SET_SENSITIVITY"
+
+        const val SET_AUDIO_SOURCE =
+            "com.kangrio.byd.assistant.action.SET_AUDIO_SOURCE"
 
         fun startService(context: Context) {
-            if (isStarted || !Utils.setupCompleted(context)) return
 
-            val intent = Intent(context, VoiceWakeService::class.java)
+            if (
+                isStarted ||
+                !Utils.setupCompleted(context)
+            ) {
+                return
+            }
+
+            val intent = Intent(
+                context,
+                VoiceWakeService::class.java
+            )
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {
@@ -278,35 +473,72 @@ class VoiceWakeService : Service() {
             }
         }
 
-        fun setState(context: Context, state: Boolean) {
+        fun setState(
+            context: Context,
+            state: Boolean
+        ) {
+
             Preferences.startHotword = state
-            val intent = Intent(context, VoiceWakeService::class.java).apply {
-                action = if (state) START_HOTWORD_DETECTION else STOP_HOTWORD_DETECTION
+
+            val intent = Intent(
+                context,
+                VoiceWakeService::class.java
+            ).apply {
+                action = if (state) {
+                    START_HOTWORD_DETECTION
+                } else {
+                    STOP_HOTWORD_DETECTION
+                }
             }
+
             context.startService(intent)
         }
 
-        fun setModel(context: Context, pmdlFilePath: String) {
-            val intent = Intent(context, VoiceWakeService::class.java).apply {
+        fun setModel(
+            context: Context,
+            pmdlFilePath: String
+        ) {
+
+            val intent = Intent(
+                context,
+                VoiceWakeService::class.java
+            ).apply {
                 action = SET_MODEL
                 putExtra("pmdlFile", pmdlFilePath)
             }
+
             context.startService(intent)
         }
 
-        fun setSensitivity(context: Context, sensitivity: Float) {
-            val intent = Intent(context, VoiceWakeService::class.java).apply {
+        fun setSensitivity(
+            context: Context,
+            sensitivity: Float
+        ) {
+
+            val intent = Intent(
+                context,
+                VoiceWakeService::class.java
+            ).apply {
                 action = SET_SENSITIVITY
                 putExtra("sensitivity", sensitivity)
             }
+
             context.startService(intent)
         }
 
-        fun setAudioSource(context: Context, source: Int) {
-            val intent = Intent(context, VoiceWakeService::class.java).apply {
+        fun setAudioSource(
+            context: Context,
+            source: Int
+        ) {
+
+            val intent = Intent(
+                context,
+                VoiceWakeService::class.java
+            ).apply {
                 action = SET_AUDIO_SOURCE
                 putExtra("source", source)
             }
+
             context.startService(intent)
         }
     }
