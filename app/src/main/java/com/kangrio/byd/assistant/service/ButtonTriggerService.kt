@@ -1,5 +1,5 @@
-package com.kangrio.byd.assistant.service
 
+package com.kangrio.byd.assistant.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
@@ -14,41 +14,53 @@ import com.kangrio.byd.assistant.util.Utils
 @SuppressLint("AccessibilityPolicy")
 class ButtonTriggerService : AccessibilityService() {
 
-
-
     override fun onServiceConnected() {
         super.onServiceConnected()
         Log.d("ButtonTriggerService", "onServiceConnected")
-        if (!Preferences.isInitialized) Preferences.init(applicationContext)
+
+        if (!Preferences.isInitialized) {
+            Preferences.init(applicationContext)
+        }
+
         serviceInfo = serviceInfo.apply {
             flags = flags or AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS
         }
+
         isServiceRunning = true
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
-        // Capture mode: save whatever is pressed and block it
+
+        // Capture mode: record the key without blocking Hello Toyota
         if (Preferences.captureMode) {
             if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
                 val list = Preferences.triggerKeyCodes
-                if (event.keyCode !in list) Preferences.triggerKeyCodes = list + event.keyCode
+                if (event.keyCode !in list) {
+                    Preferences.triggerKeyCodes = list + event.keyCode
+                    Log.d("ButtonTriggerService", "Captured key: ${event.keyCode}")
+                }
             }
-            return true
+
+            return false
         }
 
         val codes = Preferences.triggerKeyCodes
-        if (event.keyCode !in codes) return false
 
-        // Only the first keycode triggers; the others are just blocked
-        if (event.keyCode == codes.first() &&
+        if (codes.isEmpty() || event.keyCode !in codes) {
+            return false
+        }
+
+        if (
+            event.keyCode == codes.first() &&
             event.action == Preferences.keyEventAction &&
             event.repeatCount == 0
         ) {
+            Log.d("ButtonTriggerService", "Trigger key: ${event.keyCode}")
             onTriggered()
         }
 
-        // true = block the original action (DOWN, repeats and UP); false = let it through too
-        return Preferences.blockOriginalAction
+        // Always pass the original key event to the vehicle system
+        return false
     }
 
     private fun onTriggered() {
@@ -58,6 +70,7 @@ class ButtonTriggerService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         Log.d("ButtonTriggerService", "onAccessibilityEvent")
     }
+
     override fun onInterrupt() {
         Log.d("ButtonTriggerService", "onInterrupt")
     }
