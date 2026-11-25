@@ -5,7 +5,11 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'MHK-AI-Toyota-S222-1.0.11-source.zip'
+      - 'app/**'
+      - 'androidwakeword/**'
+      - '*.gradle.kts'
+      - 'gradle/**'
+      - 'gradle.properties'
       - '.github/workflows/mhk-build.yml'
 
 permissions:
@@ -28,17 +32,28 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Extract MHK AI source
+      - name: Prepare MHK AI source
         run: |
-          mkdir -p /tmp/mhk-source
-          unzip -q MHK-AI-Toyota-S222-1.0.11-source.zip -d /tmp/mhk-source
-          PROJECT_DIR=$(find /tmp/mhk-source -name settings.gradle.kts -printf '%h\n' | head -n 1)
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "Project settings.gradle.kts not found"
-            exit 1
-          fi
-          rsync -a --exclude='.git/' --exclude='.github/' "$PROJECT_DIR"/ ./
+          test -f settings.gradle.kts
+          test -f app/build.gradle.kts
+          test -f app/src/main/AndroidManifest.xml
+
           chmod +x gradlew
+
+          find app/src/main/java -type f -name '*.kt' \
+            -exec sed -i \
+            's#com\.kangrio\.byd\.assistant\.R#com.mhk.ai.assistant.R#g' {} +
+
+          sed -i \
+            -e 's#android:name=".App"#android:name="com.kangrio.byd.assistant.App"#' \
+            -e 's#android:name=".StartActivity"#android:name="com.kangrio.byd.assistant.StartActivity"#' \
+            -e 's#android:name=".activity.SettingsActivity"#android:name="com.kangrio.byd.assistant.activity.SettingsActivity"#' \
+            -e 's#android:name=".activity.PermissionOnboardingActivity"#android:name="com.kangrio.byd.assistant.activity.PermissionOnboardingActivity"#' \
+            -e 's#android:name=".activity.LogcatActivity"#android:name="com.kangrio.byd.assistant.activity.LogcatActivity"#' \
+            -e 's#android:name=".receiver.BootReceiver"#android:name="com.kangrio.byd.assistant.receiver.BootReceiver"#' \
+            -e 's#android:name=".service.VoiceWakeService"#android:name="com.kangrio.byd.assistant.service.VoiceWakeService"#' \
+            -e 's#android:name=".service.ButtonTriggerService"#android:name="com.kangrio.byd.assistant.service.ButtonTriggerService"#' \
+            app/src/main/AndroidManifest.xml
 
       - name: Build Debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
